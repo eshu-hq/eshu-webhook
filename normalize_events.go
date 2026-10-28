@@ -231,12 +231,3 @@ func parseObservedAt(raw string) string {
 	}
 	return time.Now().UTC().Format(time.RFC3339)
 }
-
-// NormalizeGCPFleshness is a deprecated alias for NormalizeGCPFreshness,
-// kept so existing callers keep compiling; new code uses the corrected
-// spelling.
-//
-// Deprecated: use NormalizeGCPFreshness.
-func NormalizeGCPFleshness(payload []byte) (GCPIntakeRequest, error) {
-	return NormalizeGCPFreshness(payload)
-}
