@@ -257,6 +257,26 @@ func TestConformanceConflictMessageNamesRoute(t *testing.T) {
 	}
 }
 
+// TestConflictMessageNamesEachRoute proves every intake route maps to its
+// own 409 label, with unknown routes falling back to the repository label.
+func TestConflictMessageNamesEachRoute(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		IntakeRoutes["repository"]:       "conflicting repository delivery",
+		IntakeRoutes["actions"]:          "conflicting actions delivery",
+		IntakeRoutes["incident"]:         "conflicting incident delivery",
+		IntakeRoutes["aws"]:              "conflicting aws delivery",
+		IntakeRoutes["gcp"]:              "conflicting gcp delivery",
+		"/api/v1/webhook/intake/unknown": "conflicting repository delivery",
+	}
+	for route, want := range cases {
+		if got := conflictMessage(route); got != want {
+			t.Errorf("conflictMessage(%q) = %q, want %q", route, got, want)
+		}
+	}
+}
+
 // TestConformanceExactDuplicateMapsToAccepted proves a true duplicate
 // (core 202 accepted) still surfaces as satellite 202.
 func TestConformanceExactDuplicateMapsToAccepted(t *testing.T) {
