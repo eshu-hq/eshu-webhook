@@ -1,0 +1,20 @@
+.github/workflows/ci.yml
+  h_78a442cba0b3e6 168
+Makefile
+  h_78a442cba0b3e6 6
+coverage_branches_test.go
+  h_78a442cba0b3e6 1-244
+coverage_handlers_test.go
+  h_78a442cba0b3e6 1-334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "363463c7fe5bb4a6ac232ac418d1aff1f01d1b43",
+  "prompts": {},
+  "humans": {
+    "h_78a442cba0b3e6": {
+      "author": "Allen Sanabria <asanabria6910@gmail.com>"
+    }
+  }
+}
