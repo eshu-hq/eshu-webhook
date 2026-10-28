@@ -253,13 +253,14 @@ func checkBodyLimit(body []byte, max int64) error {
 }
 
 // submitRequest posts one normalized request to core and translates the
-// outcome to the provider status: 202 accepted, 200 already-recorded
-// duplicate, 5xx so the provider redelivers.
+// outcome to the provider status: 202 accepted (exact duplicates coalesce
+// to 202 in core), 409 conflicting delivery identity (permanent, matching
+// the in-tree listener contract), 5xx so the provider redelivers.
 func (s *Server) submitRequest(w http.ResponseWriter, r *http.Request, route string, request any) {
 	receipt, err := s.submit.Submit(r.Context(), route, request)
 	if err != nil {
 		if err == ErrDeliveryConflict {
-			writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
+			writeError(w, http.StatusConflict, "conflicting actions delivery")
 			return
 		}
 		writeError(w, http.StatusBadGateway, "intake submission failed")

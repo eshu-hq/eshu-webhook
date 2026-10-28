@@ -41,8 +41,8 @@ const WireFieldLimit = 4096
 const intakeRequestTimeout = 10 * time.Second
 
 // ErrDeliveryConflict reports a core 409 with the delivery-conflict code:
-// the delivery is already recorded, so the handler answers 200 instead of
-// entering a 5xx redelivery loop.
+// the delivery ID is already recorded under a different identity, so the
+// handler answers 409 (permanent) instead of entering a 5xx redelivery loop.
 var ErrDeliveryConflict = errors.New("webhook intake delivery conflict")
 
 // CheckAPIVersion validates the wire version without touching storage.
