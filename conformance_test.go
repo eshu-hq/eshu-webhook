@@ -182,9 +182,11 @@ func TestConformanceGitLabPushEndToEnd(t *testing.T) {
 	}
 }
 
-// TestConformanceDuplicateMapsToOK proves a core delivery-conflict 409
-// surfaces as 200 (already recorded), not a 5xx redelivery loop.
-func TestConformanceDuplicateMapsToOK(t *testing.T) {
+// TestConformanceConflictMapsToConflict proves a core delivery-conflict
+// 409 on a conflicting-identity Actions redelivery surfaces as 409
+// (permanent), matching the in-tree listener contract — never as a 200
+// that mislabels the conflict "duplicate".
+func TestConformanceConflictMapsToConflict(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubCore{t: t, conflict: true}
@@ -200,16 +202,56 @@ func TestConformanceDuplicateMapsToOK(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, sig := signedGitHub("gh-secret", []byte(githubPushPayload))
-	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(githubPushPayload))
-	req.Header.Set("X-GitHub-Event", "push")
-	req.Header.Set("X-GitHub-Delivery", "deliv-dup")
+	payload := `{"action":"completed",` +
+		`"repository":{"id":42,"full_name":"Octo/Repo"},` +
+		`"workflow_run":{"id":100}}`
+	_, sig := signedGitHub("gh-secret", []byte(payload))
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "workflow_run")
+	req.Header.Set("X-GitHub-Delivery", "deliv-conflict")
 	req.Header.Set("X-Hub-Signature-256", sig)
 	rec := httptest.NewRecorder()
 	srv.Mux().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 for duplicate", rec.Code)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 for conflicting identity (body %s)", rec.Code, rec.Body.String())
+	}
+	if len(stub.submitted) != 1 || stub.submitted[0].route != "/api/v1/webhook/intake/actions" {
+		t.Fatalf("submissions = %+v, want one actions intake", stub.submitted)
+	}
+}
+
+// TestConformanceExactDuplicateMapsToAccepted proves a true duplicate
+// (core 202 accepted) still surfaces as satellite 202.
+func TestConformanceExactDuplicateMapsToAccepted(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubCore{t: t}
+	core := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer core.Close()
+
+	cfg := testConfig()
+	cfg.GitHubSecret = "gh-secret"
+	cfg.IntakeURL = core.URL
+	cfg.IntakeToken = "core-tok"
+	srv, err := NewServerWithClient(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"action":"completed",` +
+		`"repository":{"id":42,"full_name":"Octo/Repo"},` +
+		`"workflow_run":{"id":100}}`
+	_, sig := signedGitHub("gh-secret", []byte(payload))
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "workflow_run")
+	req.Header.Set("X-GitHub-Delivery", "deliv-exact")
+	req.Header.Set("X-Hub-Signature-256", sig)
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202 for exact duplicate (body %s)", rec.Code, rec.Body.String())
 	}
 }
 
