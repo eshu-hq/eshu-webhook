@@ -1,0 +1,34 @@
+.github/workflows/ci.yml
+  h_78a442cba0b3e6 270-273
+README.md
+  h_78a442cba0b3e6 3
+boundary_test.go
+  h_78a442cba0b3e6 122-142
+cmd/webhook/main.go
+  h_78a442cba0b3e6 14,35-49
+cmd/webhook/main_test.go
+  h_78a442cba0b3e6 20-33
+conformance_test.go
+  h_78a442cba0b3e6 224-259
+go.mod
+  h_78a442cba0b3e6 3
+intake.go
+  h_78a442cba0b3e6 218-220
+normalize.go
+  h_78a442cba0b3e6 71,112,117,119,166,210,215,217,279,327,329,356-395
+normalize_events.go
+  h_78a442cba0b3e6 160,162,234-242
+server.go
+  h_78a442cba0b3e6 79-81,218,266,275-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a61bce1da78bacae93c77d74932a30853a2e5095",
+  "prompts": {},
+  "humans": {
+    "h_78a442cba0b3e6": {
+      "author": "Allen Sanabria <asanabria6910@gmail.com>"
+    }
+  }
+}
