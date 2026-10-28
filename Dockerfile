@@ -5,7 +5,7 @@
 FROM golang:1.26.10-alpine@sha256:a2012b4a1d1f9f7e9f44e0d39b805a901e856b1dd80b4e6ee4338db547050308 AS build
 RUN apk add --no-cache ca-certificates
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY go.mod ./
 RUN go mod download
 COPY . .
 # EKS nodes are linux/amd64; pin GOARCH so builds on any host (e.g. arm64
