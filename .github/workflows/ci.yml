@@ -267,8 +267,10 @@ jobs:
       - name: gosec SARIF
         # -no-fail: gosec's bundled type-checker cannot fully load Go 1.26
         # generics and exits non-zero even with zero findings; the finding
-        # count below is the gate. Blocking on PR/push: the false-positive
-        # rate here is measured (2 G304 sites triaged per-site, count 0).
+        # count below is the gate. Blocking on PR/push: the G114 bare-
+        # ListenAndServe site is fixed by code (http.Server with timeouts)
+        # and the 2 G107 SSRF-taint sites carry per-site #nosec reasons
+        # (operator-configured, scheme/host-validated base URL), count 0.
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
           "$(go env GOPATH)/bin/gosec" -no-fail -fmt=sarif -out=gosec.sarif ./...

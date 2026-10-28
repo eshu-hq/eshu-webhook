@@ -157,9 +157,9 @@ func NormalizeAWSFreshness(payload []byte) (AWSIntakeRequest, error) {
 	return req, nil
 }
 
-// NormalizeGCPFleshness converts a verified Pub/Sub push delivery (bearer
+// NormalizeGCPFreshness converts a verified Pub/Sub push delivery (bearer
 // token auth) into a GCP intake request.
-func NormalizeGCPFleshness(payload []byte) (GCPIntakeRequest, error) {
+func NormalizeGCPFreshness(payload []byte) (GCPIntakeRequest, error) {
 	var event struct {
 		Message struct {
 			MessageID  string `json:"messageId"`
@@ -230,4 +230,13 @@ func parseObservedAt(raw string) string {
 		return parsed.UTC().Format(time.RFC3339)
 	}
 	return time.Now().UTC().Format(time.RFC3339)
+}
+
+// NormalizeGCPFleshness is a deprecated alias for NormalizeGCPFreshness,
+// kept so existing callers keep compiling; new code uses the corrected
+// spelling.
+//
+// Deprecated: use NormalizeGCPFreshness.
+func NormalizeGCPFleshness(payload []byte) (GCPIntakeRequest, error) {
+	return NormalizeGCPFreshness(payload)
 }

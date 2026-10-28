@@ -17,6 +17,20 @@ func TestRunFailsClosedWithoutConfig(t *testing.T) {
 	}
 }
 
+// TestHTTPServerHasTimeouts proves the production ingress bounds
+// connection and header-read time instead of serving with zero timeouts.
+func TestHTTPServerHasTimeouts(t *testing.T) {
+	t.Parallel()
+
+	srv := newHTTPServer("127.0.0.1:0", nil)
+	if srv.ReadTimeout <= 0 || srv.ReadHeaderTimeout <= 0 {
+		t.Fatalf("read timeouts = %v/%v, want both positive", srv.ReadTimeout, srv.ReadHeaderTimeout)
+	}
+	if srv.WriteTimeout <= 0 || srv.IdleTimeout <= 0 {
+		t.Fatalf("write/idle timeouts = %v/%v, want both positive", srv.WriteTimeout, srv.IdleTimeout)
+	}
+}
+
 func TestRunFailsClosedOnBadListenAddr(t *testing.T) {
 	err := run(func(key string) string {
 		switch key {

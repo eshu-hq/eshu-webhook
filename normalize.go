@@ -68,7 +68,7 @@ func normalizeGitHubPush(deliveryID string, payload []byte, fallback string) (Re
 	req.BeforeSHA = strings.TrimSpace(event.Before)
 	req.TargetSHA = strings.TrimSpace(event.After)
 	req.Sender = strings.TrimSpace(event.Sender.Login)
-	return decideBranchRequest(req), nil
+	return finishRepositoryRequest(req)
 }
 
 func normalizeGitHubPullRequest(deliveryID string, payload []byte, fallback string) (RepositoryIntakeRequest, error) {
@@ -109,14 +109,14 @@ func normalizeGitHubPullRequest(deliveryID string, payload []byte, fallback stri
 	if req.Action != "closed" || !event.PullRequest.Merged {
 		req.Decision = DecisionIgnored
 		req.Reason = ReasonPullRequestNotMerged
-		return req, nil
+		return checkRepositoryLengths(req)
 	}
 	if req.TargetSHA == "" {
 		req.Decision = DecisionIgnored
 		req.Reason = ReasonMissingMergeCommit
-		return req, nil
+		return checkRepositoryLengths(req)
 	}
-	return decideBranchRequest(req), nil
+	return finishRepositoryRequest(req)
 }
 
 // NormalizeGitLab converts a verified GitLab push or merged merge request
@@ -163,7 +163,7 @@ func normalizeGitLabPush(deliveryID string, payload []byte, fallback string) (Re
 	req.BeforeSHA = strings.TrimSpace(event.Before)
 	req.TargetSHA = firstNonEmpty(strings.TrimSpace(event.After), strings.TrimSpace(event.CheckoutSHA))
 	req.Sender = strings.TrimSpace(event.UserUsername)
-	return decideBranchRequest(req), nil
+	return finishRepositoryRequest(req)
 }
 
 func normalizeGitLabMergeRequest(deliveryID string, payload []byte, fallback string) (RepositoryIntakeRequest, error) {
@@ -207,14 +207,14 @@ func normalizeGitLabMergeRequest(deliveryID string, payload []byte, fallback str
 	if strings.TrimSpace(attrs.State) != "merged" {
 		req.Decision = DecisionIgnored
 		req.Reason = ReasonPullRequestNotMerged
-		return req, nil
+		return checkRepositoryLengths(req)
 	}
 	if req.TargetSHA == "" {
 		req.Decision = DecisionIgnored
 		req.Reason = ReasonMissingMergeCommit
-		return req, nil
+		return checkRepositoryLengths(req)
 	}
-	return decideBranchRequest(req), nil
+	return finishRepositoryRequest(req)
 }
 
 // NormalizeBitbucket converts a verified Bitbucket push or merged pull
@@ -276,7 +276,7 @@ func normalizeBitbucketPush(deliveryID string, payload []byte, fallback string) 
 	req.BeforeSHA = strings.TrimSpace(change.Old.Target.Hash)
 	req.TargetSHA = strings.TrimSpace(change.New.Target.Hash)
 	req.Sender = strings.TrimSpace(event.Actor.Nickname)
-	return decideBranchRequest(req), nil
+	return finishRepositoryRequest(req)
 }
 
 func normalizeBitbucketPullRequest(deliveryID string, payload []byte, fallback string) (RepositoryIntakeRequest, error) {
@@ -324,9 +324,9 @@ func normalizeBitbucketPullRequest(deliveryID string, payload []byte, fallback s
 	if req.TargetSHA == "" {
 		req.Decision = DecisionIgnored
 		req.Reason = ReasonMissingMergeCommit
-		return req, nil
+		return checkRepositoryLengths(req)
 	}
-	return decideBranchRequest(req), nil
+	return finishRepositoryRequest(req)
 }
 
 func newRepositoryRequest(provider, eventKind, deliveryID, externalID, fullName, defaultBranch, fallback string) (RepositoryIntakeRequest, error) {
@@ -348,6 +348,46 @@ func newRepositoryRequest(provider, eventKind, deliveryID, externalID, fullName,
 		"delivery_id": req.DeliveryID, "repository_external_id": req.RepositoryExternalID,
 		"repository_full_name": req.RepositoryFullName, "default_branch": req.DefaultBranch,
 	}); err != nil {
+		return RepositoryIntakeRequest{}, err
+	}
+	return req, nil
+}
+
+// wireFieldMap exposes every intake string field so the length bound
+// covers fields set after the identity check (ref, SHAs, sender, action,
+// PR fields), not only the four identity fields checked at construction.
+func (r RepositoryIntakeRequest) wireFieldMap() map[string]string {
+	return map[string]string{
+		"api_version": r.APIVersion, "provider": r.Provider,
+		"delivery_id": r.DeliveryID, "event_kind": r.EventKind,
+		"decision": r.Decision, "reason": r.Reason,
+		"repository_external_id": r.RepositoryExternalID,
+		"repository_full_name":   r.RepositoryFullName,
+		"default_branch":         r.DefaultBranch,
+		"ref":                    r.Ref,
+		"before_sha":             r.BeforeSHA,
+		"target_sha":             r.TargetSHA,
+		"action":                 r.Action,
+		"sender":                 r.Sender,
+		"pull_request_number":    r.PullRequestNumber,
+		"pull_request_url":       r.PullRequestURL,
+		"pull_request_title":     r.PullRequestTitle,
+	}
+}
+
+// finishRepositoryRequest applies the branch decision, then bounds every
+// wire field. The decision runs first so tag/off-branch/deleted-branch
+// deliveries keep their ignored reason; the length check runs last so no
+// oversized field reaches the intake uplink.
+func finishRepositoryRequest(req RepositoryIntakeRequest) (RepositoryIntakeRequest, error) {
+	return checkRepositoryLengths(decideBranchRequest(req))
+}
+
+// checkRepositoryLengths bounds every wire field of an already-decided
+// request. Ignored-decision early returns use this directly so oversized
+// fields in unmerged or SHA-less PRs still fail closed before submission.
+func checkRepositoryLengths(req RepositoryIntakeRequest) (RepositoryIntakeRequest, error) {
+	if err := CheckWireLengths(req.wireFieldMap()); err != nil {
 		return RepositoryIntakeRequest{}, err
 	}
 	return req, nil

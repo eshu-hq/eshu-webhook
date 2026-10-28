@@ -1,6 +1,6 @@
 # eshu-webhook
 
-Eshu webhook admission and normalization. Pre-release: holds no cutover authority until its reviewed cutover. Refs #8876, part of #6707.
+Eshu webhook admission and normalization. Pre-release: holds no cutover authority until its reviewed cutover. Refs eshu-hq/eshu#8876, part of eshu-hq/eshu#6707. Scaffolded from the #6710 collector template (eshu-collector-terraform-state).
 
 Stateless verifier/normalizer satellite: verifies provider webhook
 signatures, normalizes deliveries, and submits them to core's versioned

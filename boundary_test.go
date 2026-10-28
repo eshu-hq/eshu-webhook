@@ -119,6 +119,27 @@ func TestWireFieldLimitRejectsOversizeField(t *testing.T) {
 	}
 }
 
+// TestRepositoryNormalizeRejectsOversizePostIdentityFields proves fields
+// set after the identity check (sender, ref, SHAs, PR fields) are still
+// bounded: a 1 MiB hostile sender must fail closed, not normalize.
+func TestRepositoryNormalizeRejectsOversizePostIdentityFields(t *testing.T) {
+	t.Parallel()
+
+	big := strings.Repeat("s", WireFieldLimit+1)
+	payload := `{"ref":"refs/heads/main","before":"a0","after":"b1",` +
+		`"repository":{"id":7,"full_name":"o/r","default_branch":"main"},` +
+		`"sender":{"login":"` + big + `"}}`
+	if _, err := NormalizeGitHub("push", "d1", []byte(payload), "main"); err == nil {
+		t.Fatal("NormalizeGitHub(oversize sender) = nil, want wire-length error")
+	}
+	bigRef := `{"ref":"refs/heads/` + strings.Repeat("b", WireFieldLimit+1) + `","before":"a0","after":"b1",` +
+		`"repository":{"id":7,"full_name":"o/r","default_branch":"main"},` +
+		`"sender":{"login":"u"}}`
+	if _, err := NormalizeGitHub("push", "d1", []byte(bigRef), "main"); err == nil {
+		t.Fatal("NormalizeGitHub(oversize ref) = nil, want wire-length error")
+	}
+}
+
 // TestEmptyPayloadIsRejected proves empty and whitespace-only deliveries
 // fail closed instead of normalizing to a zero trigger.
 func TestEmptyPayloadIsRejected(t *testing.T) {

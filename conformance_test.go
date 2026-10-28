@@ -221,6 +221,42 @@ func TestConformanceConflictMapsToConflict(t *testing.T) {
 	}
 }
 
+// TestConformanceConflictMessageNamesRoute proves the 409 body names the
+// route that conflicted: a repository-route conflict must not answer with
+// an actions-specific message.
+func TestConformanceConflictMessageNamesRoute(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubCore{t: t, conflict: true}
+	core := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer core.Close()
+
+	cfg := testConfig()
+	cfg.GitLabToken = "gl-tok"
+	cfg.IntakeURL = core.URL
+	cfg.IntakeToken = "core-tok"
+	srv, err := NewServerWithClient(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"object_kind":"push","ref":"refs/heads/main","before":"a0","after":"b1",` +
+		`"project":{"id":7,"path_with_namespace":"grp/proj","default_branch":"main"},` +
+		`"user_username":"u","checkout_sha":"b1"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/gitlab", strings.NewReader(payload))
+	req.Header.Set("X-Gitlab-Event", "Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gl-tok")
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "actions") {
+		t.Fatalf("409 body %s names actions on a repository route", rec.Body.String())
+	}
+}
+
 // TestConformanceExactDuplicateMapsToAccepted proves a true duplicate
 // (core 202 accepted) still surfaces as satellite 202.
 func TestConformanceExactDuplicateMapsToAccepted(t *testing.T) {

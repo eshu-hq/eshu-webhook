@@ -76,6 +76,9 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "intake uplink is not configured")
 		return
 	}
+	// #nosec G107 -- the request URL is the operator-configured intake base
+	// URL (validated to http(s) scheme plus host at construction) joined
+	// with the /healthz probe path; no delivery content reaches the URL.
 	response, err := s.submit.client.Do(request)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "intake uplink is unreachable")
@@ -212,7 +215,7 @@ func (s *Server) handleGCPFreshness(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid gcp freshness token")
 		return
 	}
-	req, err := NormalizeGCPFleshness(body)
+	req, err := NormalizeGCPFreshness(body)
 	if err != nil {
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -260,13 +263,30 @@ func (s *Server) submitRequest(w http.ResponseWriter, r *http.Request, route str
 	receipt, err := s.submit.Submit(r.Context(), route, request)
 	if err != nil {
 		if err == ErrDeliveryConflict {
-			writeError(w, http.StatusConflict, "conflicting actions delivery")
+			writeError(w, http.StatusConflict, conflictMessage(route))
 			return
 		}
 		writeError(w, http.StatusBadGateway, "intake submission failed")
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"trigger_id": receipt.TriggerID})
+}
+
+// conflictMessage names the intake route that conflicted so a 409 on one
+// route never carries another route's label.
+func conflictMessage(route string) string {
+	switch route {
+	case IntakeRoutes["actions"]:
+		return "conflicting actions delivery"
+	case IntakeRoutes["incident"]:
+		return "conflicting incident delivery"
+	case IntakeRoutes["aws"]:
+		return "conflicting aws delivery"
+	case IntakeRoutes["gcp"]:
+		return "conflicting gcp delivery"
+	default:
+		return "conflicting repository delivery"
+	}
 }
 
 // deliveryID prefers the provider's delivery header and falls back to a

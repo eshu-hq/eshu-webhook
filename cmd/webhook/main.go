@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	webhook "github.com/eshu-hq/eshu-webhook"
 )
@@ -31,5 +32,19 @@ func run(getenv func(string) string) error {
 	if err != nil {
 		return err
 	}
-	return http.ListenAndServe(cfg.ListenAddr, server.Mux())
+	return newHTTPServer(cfg.ListenAddr, server.Mux()).ListenAndServe()
+}
+
+// newHTTPServer bounds the production ingress: header reads, full reads,
+// writes, and idle keep-alives all time out so a slow peer cannot hold a
+// handler forever.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadTimeout:       10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 }

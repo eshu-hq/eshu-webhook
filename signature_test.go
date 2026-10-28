@@ -7,7 +7,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"testing"
 )
 
@@ -119,5 +118,4 @@ func TestSignatureVectorsAreDistinctPerPayload(t *testing.T) {
 	if a == b {
 		t.Fatal("signatures for distinct payloads must differ")
 	}
-	fmt.Println(a[:16], b[:16])
 }
