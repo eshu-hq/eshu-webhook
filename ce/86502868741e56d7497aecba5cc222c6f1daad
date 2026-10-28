@@ -1,0 +1,14 @@
+seed_oversize_proof.go
+  h_78a442cba0b3e6 1-499
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce86502868741e56d7497aecba5cc222c6f1daad",
+  "prompts": {},
+  "humans": {
+    "h_78a442cba0b3e6": {
+      "author": "Allen Sanabria <asanabria6910@gmail.com>"
+    }
+  }
+}
