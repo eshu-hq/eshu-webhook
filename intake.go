@@ -215,9 +215,10 @@ func (c *IntakeClient) Submit(ctx context.Context, route string, request any) (R
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	httpRequest.Header.Set("Authorization", "Bearer "+c.token)
-	// #nosec G107 -- the request URL is the operator-configured intake base
-	// URL (validated to http(s) scheme plus host at construction) joined
-	// with a pinned route constant; no delivery content reaches the URL.
+	// #nosec G107, G704 -- the request URL is the operator-configured
+	// intake base URL (validated to http(s) scheme plus host at
+	// construction) joined with a pinned route constant; no delivery
+	// content reaches the URL, so the taint path is not exploitable.
 	response, err := c.client.Do(httpRequest)
 	if err != nil {
 		return receipt, fmt.Errorf("submit intake %s: %w", route, err)
