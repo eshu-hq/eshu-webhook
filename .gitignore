@@ -1,0 +1,5 @@
+# Local lane artifacts (never commit test output).
+coverage.out
+gosec.sarif
+# Go build cache output.
+/webhook

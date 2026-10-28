@@ -1,0 +1,248 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 eshu-hq
+
+package webhook
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+// stubCore records the intake submissions the satellite makes and answers
+// with canned receipts.
+type stubCore struct {
+	t         *testing.T
+	submitted []stubSubmission
+	conflict  bool
+}
+
+type stubSubmission struct {
+	route string
+	auth  string
+	body  []byte
+}
+
+func (s *stubCore) handler(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	s.submitted = append(s.submitted, stubSubmission{route: r.URL.Path, auth: r.Header.Get("Authorization"), body: body})
+	w.Header().Set("Content-Type", "application/json")
+	if s.conflict {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"api_version":"v1","code":"delivery_conflict","duplicate":true}`))
+		return
+	}
+	_, _ = w.Write([]byte(`{"api_version":"v1","trigger_id":"t-9","status":"pending","decision":"accepted","kind":"push"}`))
+}
+
+func signedGitHub(secret string, payload []byte) (string, string) {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(payload)
+	return "push", "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+const githubPushPayload = `{"ref":"refs/heads/main","before":"abc000","after":"def111",` +
+	`"repository":{"id":42,"full_name":"octo/repo","default_branch":"main"},` +
+	`"sender":{"login":"octo"},"head_commit":{"id":"def111"}}`
+
+// TestConformanceGitHubPushEndToEnd proves the full satellite path for one
+// provider: verify the provider signature, normalize the payload, and submit
+// the v1 intake request with bearer auth to the exact core route.
+func TestConformanceGitHubPushEndToEnd(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubCore{t: t}
+	core := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer core.Close()
+
+	cfg := testConfig()
+	cfg.GitHubSecret = "gh-secret"
+	cfg.IntakeURL = core.URL
+	cfg.IntakeToken = "core-tok"
+	srv, err := NewServerWithClient(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := srv.Mux()
+
+	event, sig := signedGitHub("gh-secret", []byte(githubPushPayload))
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(githubPushPayload))
+	req.Header.Set("X-GitHub-Event", event)
+	req.Header.Set("X-GitHub-Delivery", "deliv-1")
+	req.Header.Set("X-Hub-Signature-256", sig)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d (body %s)", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+	if len(stub.submitted) != 1 {
+		t.Fatalf("core submissions = %d, want 1", len(stub.submitted))
+	}
+	sub := stub.submitted[0]
+	if sub.route != "/api/v1/webhook/intake/repository" {
+		t.Fatalf("route = %q, want intake repository route", sub.route)
+	}
+	if sub.auth != "Bearer core-tok" {
+		t.Fatalf("auth = %q, want Bearer core-tok", sub.auth)
+	}
+	for _, want := range []string{`"delivery_id":"deliv-1"`, `"repository_full_name":"octo/repo"`, `"target_sha":"def111"`, `"decision":"accepted"`} {
+		if !strings.Contains(string(sub.body), want) {
+			t.Errorf("submitted body missing %s: %s", want, sub.body)
+		}
+	}
+}
+
+// TestConformanceBadSignatureNeverReachesCore proves a forged delivery is
+// rejected with 401 and produces zero intake submissions.
+func TestConformanceBadSignatureNeverReachesCore(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubCore{t: t}
+	core := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer core.Close()
+
+	cfg := testConfig()
+	cfg.GitHubSecret = "gh-secret"
+	cfg.IntakeURL = core.URL
+	cfg.IntakeToken = "core-tok"
+	srv, err := NewServerWithClient(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(githubPushPayload))
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-GitHub-Delivery", "deliv-2")
+	req.Header.Set("X-Hub-Signature-256", "sha256=00")
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if len(stub.submitted) != 0 {
+		t.Fatalf("core submissions = %d, want 0", len(stub.submitted))
+	}
+}
+
+// TestConformanceNonPOSTIsRejected proves only POST reaches the verify path.
+func TestConformanceNonPOSTIsRejected(t *testing.T) {
+	t.Parallel()
+
+	srv, err := NewServerWithClient(testConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/webhooks/github", nil)
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
+	}
+}
+
+// TestConformanceGitLabPushEndToEnd proves the token-auth provider path:
+// X-Gitlab-Token verification, normalization, and intake submission.
+func TestConformanceGitLabPushEndToEnd(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubCore{t: t}
+	core := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer core.Close()
+
+	cfg := testConfig()
+	cfg.GitLabToken = "gl-tok"
+	cfg.IntakeURL = core.URL
+	cfg.IntakeToken = "core-tok"
+	srv, err := NewServerWithClient(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"object_kind":"push","ref":"refs/heads/main","before":"a0","after":"b1",` +
+		`"project":{"id":7,"path_with_namespace":"grp/proj","default_branch":"main"},` +
+		`"user_username":"u","checkout_sha":"b1"}`
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/gitlab", strings.NewReader(payload))
+	req.Header.Set("X-Gitlab-Event", "Push Hook")
+	req.Header.Set("X-Gitlab-Token", "gl-tok")
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202 (body %s)", rec.Code, rec.Body.String())
+	}
+	if len(stub.submitted) != 1 || stub.submitted[0].route != "/api/v1/webhook/intake/repository" {
+		t.Fatalf("submissions = %+v, want one repository intake", stub.submitted)
+	}
+}
+
+// TestConformanceDuplicateMapsToOK proves a core delivery-conflict 409
+// surfaces as 200 (already recorded), not a 5xx redelivery loop.
+func TestConformanceDuplicateMapsToOK(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubCore{t: t, conflict: true}
+	core := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer core.Close()
+
+	cfg := testConfig()
+	cfg.GitHubSecret = "gh-secret"
+	cfg.IntakeURL = core.URL
+	cfg.IntakeToken = "core-tok"
+	srv, err := NewServerWithClient(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, sig := signedGitHub("gh-secret", []byte(githubPushPayload))
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(githubPushPayload))
+	req.Header.Set("X-GitHub-Event", "push")
+	req.Header.Set("X-GitHub-Delivery", "deliv-dup")
+	req.Header.Set("X-Hub-Signature-256", sig)
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 for duplicate", rec.Code)
+	}
+}
+
+// TestConformanceHealthz proves the local liveness probe answers without
+// provider secrets or core reachability.
+func TestConformanceHealthz(t *testing.T) {
+	t.Parallel()
+
+	srv, err := NewServerWithClient(testConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+// TestConformanceCIWorkflowPinsRequiredLanes keeps the GitHub Actions
+// contract stable: the required ci-complete aggregation plus the lint, test,
+// race, shell, image, govulncheck, gosec, and actionlint lanes.
+func TestConformanceCIWorkflowPinsRequiredLanes(t *testing.T) {
+	t.Parallel()
+
+	raw, err := readRepoFile(t, ".github/workflows/ci.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lane := range []string{"lint:", "test:", "race:", "shell:", "image:", "govulncheck:", "gosec:", "actionlint:", "ci-complete:"} {
+		if !strings.Contains(raw, lane) {
+			t.Errorf("ci.yml missing lane %q", lane)
+		}
+	}
+}
