@@ -146,15 +146,17 @@ func TestCIWorkflowPinsActionsByCommitSHA(t *testing.T) {
 
 // effectiveGates pins every run gate to the exact expression the retired
 // inline lane used. Schedule runs keep lint/test/race/shell/image/actionlint
-// off and govulncheck/gosec on, as before the move. run-boundary mirrors the
-// retired `test` lane, which held the boundary tests as a step.
+// off and govulncheck/gosec on, as before the move. run-boundary follows the
+// retired `test` lane, which held the boundary tests as a step, minus the
+// fixtures clause: the boundary tests are a subset of the test lane's
+// go test ./..., so a fixture-only PR runs `test` only.
 var effectiveGates = map[string]string{
 	"run-lint":        "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}",
 	"run-test":        "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.fixtures == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}",
 	"run-race":        "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}",
 	"run-shell":       "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && needs.changes.outputs.shell == 'true') }}",
 	"run-image":       "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.image == 'true' || needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true')) }}",
-	"run-boundary":    "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.fixtures == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}",
+	"run-boundary":    "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}",
 	"run-govulncheck": "${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && (needs.changes.outputs.deps == 'true' || needs.changes.outputs.workflows == 'true')) }}",
 	"run-gosec":       "${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true')) }}",
 	"run-actionlint":  "${{ github.event_name == 'push' || (github.event_name == 'pull_request' && needs.changes.outputs.workflows == 'true') }}",

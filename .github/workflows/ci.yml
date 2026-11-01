@@ -23,7 +23,8 @@
 #   required context does not change.
 # - The boundary tests (import boundary, 1 MiB cap, wire limits) were a step
 #   inside `test`; they now run as the reusable `boundary` lane via
-#   boundary-command, gated like `test`. `test` still runs go test ./....
+#   boundary-command, gated like `test` minus the fixtures clause (a
+#   fixture-only PR runs `test` only). `test` still runs go test ./....
 # - gosec: the reusable scan never fails by itself. gosec-fail-on-findings is
 #   true on every event so PR and push runs stay blocking on any finding, as
 #   the inline lane was (baseline: 0 findings, 2 per-site #nosec with
@@ -187,8 +188,9 @@ jobs:
         from_pinned=$(grep -Ec '^[[:space:]]*FROM [^[:space:]]+@sha256:[0-9a-f]{64}' Dockerfile)
         echo "Dockerfile bases: $from_pinned/$from_total digest-pinned"
         [ "$from_total" -ge 1 ] && [ "$from_pinned" -eq "$from_total" ]
-      # The boundary tests ran as a `test` step; they keep the `test` gate.
-      run-boundary: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.fixtures == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}
+      # The boundary tests ran as a `test` step; they keep the `test` gate minus
+      # fixtures (fixture-only runs `test` only; boundary is a subset of it).
+      run-boundary: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}
       boundary-command: go test . -run 'TestImportBoundary|TestBodyOverLimit|TestDefaultBodyLimit|TestWireFieldLimit|TestEmptyPayload|TestMalformedJSON' -count=1 -v
       run-govulncheck: ${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && (needs.changes.outputs.deps == 'true' || needs.changes.outputs.workflows == 'true')) }}
       run-gosec: ${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true')) }}
