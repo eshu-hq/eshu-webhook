@@ -73,6 +73,11 @@ name: webhook-ci
 on:
   pull_request:
   push:
+    # Main only: every run-* gate treats a push as "run everything", so an
+    # unfiltered trigger ran every lane on every branch push on top of the
+    # pull_request run that applies the path filters (#20).
+    branches:
+      - main
   schedule:
     - cron: "0 6 * * 1" # weekly Monday 06:00 UTC: govulncheck + gosec only
 
