@@ -14,6 +14,10 @@ and the only required context on `main`; `.github/workflows/ci.yml` lists
 the accepted deltas of the move. `ci_workflow_test.go` freezes the pin,
 the run gates, the tool versions, and the aggregator.
 
+`bash scripts/webhook-seed-matrix.sh` is a local runner (not a CI gate) that
+seeds a defect per lane (vet, lint, format, race, tidy, the 500-line cap, the
+coverage floor), asserts RED then GREEN, and leaves the tree as it found it.
+
 ## Coverage floor
 
 The `race` lane fails below `COVERAGE_FLOOR` (set in the Makefile and
