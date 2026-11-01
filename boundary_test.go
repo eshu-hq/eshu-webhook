@@ -164,3 +164,5 @@ func TestMalformedJSONIsRejected(t *testing.T) {
 		t.Fatal("NormalizeGitLab(truncated) = nil, want error")
 	}
 }
+
+// fork-pr lane proof, do not merge
