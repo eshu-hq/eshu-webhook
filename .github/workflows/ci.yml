@@ -188,7 +188,7 @@ jobs:
         echo "Dockerfile bases: $from_pinned/$from_total digest-pinned"
         [ "$from_total" -ge 1 ] && [ "$from_pinned" -eq "$from_total" ]
       # The boundary tests ran as a `test` step; they keep the `test` gate.
-      run-boundary: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.fixtures == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}
+      run-boundary: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.misc == 'true' || needs.changes.outputs.workflows == 'true')) }}
       boundary-command: go test . -run 'TestImportBoundary|TestBodyOverLimit|TestDefaultBodyLimit|TestWireFieldLimit|TestEmptyPayload|TestMalformedJSON' -count=1 -v
       run-govulncheck: ${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && (needs.changes.outputs.deps == 'true' || needs.changes.outputs.workflows == 'true')) }}
       run-gosec: ${{ github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && (needs.changes.outputs.go == 'true' || needs.changes.outputs.workflows == 'true')) }}
