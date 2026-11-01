@@ -4,7 +4,6 @@
 package webhook
 
 import (
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -45,11 +44,11 @@ type ciWorkflow struct {
 func loadCIWorkflow(t *testing.T) ciWorkflow {
 	t.Helper()
 
-	raw, err := os.ReadFile(ciWorkflowPath)
+	raw, err := readRepoFile(t, ciWorkflowPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return parseCIWorkflow(t, string(raw))
+	return parseCIWorkflow(t, raw)
 }
 
 func parseCIWorkflow(t *testing.T, raw string) ciWorkflow {
@@ -207,11 +206,11 @@ func TestCIWorkflowPinsToolsAndFloor(t *testing.T) {
 func TestCoverageFloorParity(t *testing.T) {
 	t.Parallel()
 
-	makefile, err := os.ReadFile("Makefile")
+	makefile, err := readRepoFile(t, "Makefile")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := floorLiteral.FindStringSubmatch(string(makefile))
+	m := floorLiteral.FindStringSubmatch(makefile)
 	ci := field(loadCIWorkflow(t).job(t, "lanes"), "coverage-floor")
 	if m == nil || ci == "" {
 		t.Fatalf("COVERAGE_FLOOR literal missing (Makefile=%q lanes=%q)", m, ci)
