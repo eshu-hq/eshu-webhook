@@ -37,3 +37,5 @@ coverage floor. `docker build -t eshu-webhook .` builds the distroless
 nonroot amd64 image. In CI, `ci-complete` is the only required context:
 it passes when needed lanes pass and when docs-only changes
 legitimately skip every lane.
+
+<!-- lane-selection proof, do not merge -->
