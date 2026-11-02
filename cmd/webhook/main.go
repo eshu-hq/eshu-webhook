@@ -9,6 +9,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -32,6 +33,7 @@ func run(getenv func(string) string) error {
 	if err != nil {
 		return err
 	}
+	server.WithLogger(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	return newHTTPServer(cfg.ListenAddr, server.Mux()).ListenAndServe()
 }
 

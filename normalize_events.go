@@ -16,7 +16,7 @@ import (
 func NormalizeGitHubActions(event string, deliveryID string, payload []byte) (ActionsIntakeRequest, error) {
 	event = strings.TrimSpace(event)
 	if event != "workflow_run" && event != "workflow_job" {
-		return ActionsIntakeRequest{}, fmt.Errorf("unsupported github actions event %q", event)
+		return ActionsIntakeRequest{}, unsupportedEvent("github actions event", event)
 	}
 	var decoded struct {
 		Action     string `json:"action"`

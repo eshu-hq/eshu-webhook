@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -17,8 +18,10 @@ import (
 // local liveness. Every provider route verifies, normalizes, and submits
 // through the core intake API; nothing is stored locally.
 type Server struct {
-	cfg    Config
-	submit *IntakeClient
+	cfg     Config
+	submit  *IntakeClient
+	logger  *slog.Logger
+	metrics *metrics
 }
 
 // NewServer builds the satellite server. The intake uplink is always
@@ -30,7 +33,7 @@ func NewServer(cfg Config, client *http.Client) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{cfg: cfg, submit: submit}, nil
+	return &Server{cfg: cfg, submit: submit, logger: discardLogger(), metrics: newMetrics()}, nil
 }
 
 // NewServerWithClient is NewServer with an explicit transport, used by
@@ -46,13 +49,14 @@ func (s *Server) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
-	register(mux, s.cfg.GitHubPath, s.handleGitHub)
-	register(mux, s.cfg.GitLabPath, s.handleGitLab)
-	register(mux, s.cfg.BitbucketPath, s.handleBitbucket)
-	register(mux, s.cfg.PagerDutyPath, s.handlePagerDuty)
-	register(mux, s.cfg.JiraPath, s.handleJira)
-	register(mux, s.cfg.AWSPath, s.handleAWSFreshness)
-	register(mux, s.cfg.GCPPath, s.handleGCPFreshness)
+	mux.HandleFunc("/metrics", s.handleMetrics)
+	register(mux, s.cfg.GitHubPath, s.instrument("github", s.handleGitHub))
+	register(mux, s.cfg.GitLabPath, s.instrument("gitlab", s.handleGitLab))
+	register(mux, s.cfg.BitbucketPath, s.instrument("bitbucket", s.handleBitbucket))
+	register(mux, s.cfg.PagerDutyPath, s.instrument("pagerduty", s.handlePagerDuty))
+	register(mux, s.cfg.JiraPath, s.instrument("jira", s.handleJira))
+	register(mux, s.cfg.AWSPath, s.instrument("aws", s.handleAWSFreshness))
+	register(mux, s.cfg.GCPPath, s.instrument("gcp", s.handleGCPFreshness))
 	return mux
 }
 
@@ -111,14 +115,14 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 	case "workflow_run", "workflow_job":
 		req, err := NormalizeGitHubActions(event, deliveryID, body)
 		if err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeUnprocessable(w, err)
 			return
 		}
 		s.submitRequest(w, r, IntakeRoutes["actions"], req)
 	default:
 		req, err := NormalizeGitHub(event, deliveryID, body, s.cfg.DefaultBranch)
 		if err != nil {
-			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			writeUnprocessable(w, err)
 			return
 		}
 		s.submitRequest(w, r, IntakeRoutes["repository"], req)
@@ -134,6 +138,7 @@ const githubEventPing = "ping"
 // "ping". The delivery is verified before this runs and is never submitted
 // to the intake host, so nothing is stored for it.
 func writeGitHubPingAccepted(w http.ResponseWriter) {
+	setIgnored(w, githubEventPing)
 	writeJSON(w, http.StatusAccepted, map[string]string{
 		"status":   "ignored",
 		"decision": "ignored",
@@ -152,7 +157,7 @@ func (s *Server) handleGitLab(w http.ResponseWriter, r *http.Request) {
 	}
 	req, err := NormalizeGitLab(r.Header.Get("X-Gitlab-Event"), deliveryID(r.Header.Get("X-Gitlab-Delivery"), body), body, s.cfg.DefaultBranch)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeUnprocessable(w, err)
 		return
 	}
 	s.submitRequest(w, r, IntakeRoutes["repository"], req)
@@ -169,7 +174,7 @@ func (s *Server) handleBitbucket(w http.ResponseWriter, r *http.Request) {
 	}
 	req, err := NormalizeBitbucket(r.Header.Get("X-Event-Key"), deliveryID(r.Header.Get("X-Request-UUID"), body), body, s.cfg.DefaultBranch)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeUnprocessable(w, err)
 		return
 	}
 	s.submitRequest(w, r, IntakeRoutes["repository"], req)
@@ -186,7 +191,7 @@ func (s *Server) handlePagerDuty(w http.ResponseWriter, r *http.Request) {
 	}
 	req, err := NormalizePagerDuty(body, s.cfg.PagerDutyScopeID)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeUnprocessable(w, err)
 		return
 	}
 	s.submitRequest(w, r, IntakeRoutes["incident"], req)
@@ -203,7 +208,7 @@ func (s *Server) handleJira(w http.ResponseWriter, r *http.Request) {
 	}
 	req, err := NormalizeJira(body, s.cfg.JiraScopeID)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeUnprocessable(w, err)
 		return
 	}
 	s.submitRequest(w, r, IntakeRoutes["incident"], req)
@@ -220,7 +225,7 @@ func (s *Server) handleAWSFreshness(w http.ResponseWriter, r *http.Request) {
 	}
 	req, err := NormalizeAWSFreshness(body)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeUnprocessable(w, err)
 		return
 	}
 	s.submitRequest(w, r, IntakeRoutes["aws"], req)
@@ -237,7 +242,7 @@ func (s *Server) handleGCPFreshness(w http.ResponseWriter, r *http.Request) {
 	}
 	req, err := NormalizeGCPFreshness(body)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, err.Error())
+		writeUnprocessable(w, err)
 		return
 	}
 	s.submitRequest(w, r, IntakeRoutes["gcp"], req)
@@ -264,6 +269,7 @@ func (s *Server) readPostBody(w http.ResponseWriter, r *http.Request) ([]byte, b
 		writeError(w, http.StatusRequestEntityTooLarge, err.Error())
 		return nil, false
 	}
+	noteBody(w, body)
 	return body, true
 }
 
@@ -278,7 +284,9 @@ func checkBodyLimit(body []byte, max int64) error {
 // submitRequest posts one normalized request to core and translates the
 // outcome to the provider status: 202 accepted (exact duplicates coalesce
 // to 202 in core), 409 conflicting delivery identity (permanent, matching
-// the in-tree listener contract), 5xx so the provider redelivers.
+// the in-tree listener contract), 502 when core intake fails. GitHub does
+// not retry a failed delivery on its own; an operator redelivers it by hand
+// within 3 days.
 func (s *Server) submitRequest(w http.ResponseWriter, r *http.Request, route string, request any) {
 	receipt, err := s.submit.Submit(r.Context(), route, request)
 	if err != nil {

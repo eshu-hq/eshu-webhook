@@ -38,7 +38,7 @@ func NormalizeGitHub(event string, deliveryID string, payload []byte, defaultBra
 	case "workflow_run", "workflow_job":
 		return RepositoryIntakeRequest{}, fmt.Errorf("github event %q is an actions identity, use NormalizeGitHubActions", event)
 	default:
-		return RepositoryIntakeRequest{}, fmt.Errorf("unsupported github webhook event %q", event)
+		return RepositoryIntakeRequest{}, unsupportedEvent("github webhook event", event)
 	}
 }
 
@@ -134,7 +134,7 @@ func NormalizeGitLab(eventHeader string, deliveryID string, payload []byte, defa
 	case "merge_request":
 		return normalizeGitLabMergeRequest(deliveryID, payload, defaultBranchFallback)
 	default:
-		return RepositoryIntakeRequest{}, fmt.Errorf("unsupported gitlab object_kind %q", probe.ObjectKind)
+		return RepositoryIntakeRequest{}, unsupportedEvent("gitlab object_kind", probe.ObjectKind)
 	}
 }
 
@@ -227,7 +227,7 @@ func NormalizeBitbucket(event string, deliveryID string, payload []byte, default
 	case "pullrequest:fulfilled":
 		return normalizeBitbucketPullRequest(deliveryID, payload, defaultBranchFallback)
 	default:
-		return RepositoryIntakeRequest{}, fmt.Errorf("unsupported bitbucket event %q", event)
+		return RepositoryIntakeRequest{}, unsupportedEvent("bitbucket event", event)
 	}
 }
 
