@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+	"unicode/utf8"
 )
 
 // WithLogger sets the logger that receives one structured record per
@@ -209,10 +210,22 @@ func loggedDeliveryID(provider string, r *http.Request, body []byte) string {
 		return ""
 	}
 	id := deliveryID(header, body)
-	if len(id) > maxLoggedDeliveryID {
-		id = id[:maxLoggedDeliveryID]
+	return truncateOnRune(id, maxLoggedDeliveryID)
+}
+
+// truncateOnRune cuts s to at most limit bytes without splitting a multi-byte
+// rune: if byte limit is a continuation byte, the cut backs up to the start
+// of that rune. It looks back at most utf8.UTFMax-1 bytes, so a header of raw
+// non-UTF-8 bytes still ends within the bound.
+func truncateOnRune(s string, limit int) string {
+	if len(s) <= limit {
+		return s
 	}
-	return id
+	cut := limit
+	for back := 0; back < utf8.UTFMax-1 && cut > 0 && !utf8.RuneStart(s[cut]); back++ {
+		cut--
+	}
+	return s[:cut]
 }
 
 // handleMetrics serves the Prometheus text exposition. It is read-only.
