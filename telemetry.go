@@ -4,6 +4,7 @@
 package webhook
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sort"
@@ -101,10 +102,20 @@ func (m *metrics) observe(provider, outcome, reason string, elapsed time.Duratio
 // writeText renders the Prometheus text exposition, with series sorted so
 // scrapes and tests are deterministic. Both family headers are always
 // written so an idle process still exposes a parseable document.
+//
+// The document is rendered into a buffer while the lock is held and written
+// to w only after the lock is released, so a slow or stalled scrape client
+// can never block observe on the request path.
 func (m *metrics) writeText(w io.Writer) {
+	var buf bytes.Buffer
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.render(&buf)
+	m.mu.Unlock()
+	_, _ = w.Write(buf.Bytes())
+}
 
+// render writes the exposition to an in-memory buffer. The caller holds m.mu.
+func (m *metrics) render(w *bytes.Buffer) {
 	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s counter\n", metricRequestsTotal, requestsTotalHelp, metricRequestsTotal)
 	keys := make([]requestKey, 0, len(m.requests))
 	for key := range m.requests {
