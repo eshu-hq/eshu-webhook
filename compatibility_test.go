@@ -185,3 +185,108 @@ func TestUnsupportedAPIVersionIsRejected(t *testing.T) {
 		t.Fatal("APIVersionV1 must be non-blank")
 	}
 }
+
+// TestEveryIntakeFamilyStampsTheSupportedAPIVersion drives one delivery per
+// intake family through the HTTP server and asserts the exact api_version
+// string on the wire. The README version pair and core's CheckAPIVersion
+// both key on this string, so a change to it must fail here first.
+func TestEveryIntakeFamilyStampsTheSupportedAPIVersion(t *testing.T) {
+	t.Parallel()
+
+	const wantVersion = "v1"
+	if APIVersionV1 != wantVersion {
+		t.Fatalf("APIVersionV1 = %q, want %q: update the README version pair and the oldest/newest core build before changing the wire version", APIVersionV1, wantVersion)
+	}
+
+	cfg := fullTestConfig()
+	srv, stub := serveMux(t, cfg)
+	mux := srv.Mux()
+
+	workflowRun := `{"action":"completed","repository":{"id":42,"full_name":"Octo/Repo"},"workflow_run":{"id":100}}`
+	pagerDuty := `{"event":{"id":"e1","event_type":"incident.triggered"},"incident":{"id":"i1"}}`
+	aws := `{"id":"ev-1","detail-type":"EC2 State Change","account":"1","region":"r","source":"aws.ec2","detail":{}}`
+	gcp := `{"message":{"messageId":"m-1","attributes":{"parentScopeId":"p1"}}}`
+
+	github := func(event, payload string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(payload))
+		req.Header.Set("X-GitHub-Event", event)
+		req.Header.Set("X-GitHub-Delivery", "d-"+event)
+		req.Header.Set("X-Hub-Signature-256", signSHA256("gh-secret", []byte(payload)))
+		return req
+	}
+	bearer := func(path, token, payload string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(payload))
+		req.Header.Set("Authorization", "Bearer "+token)
+		return req
+	}
+	pagerDutyReq := httptest.NewRequest(http.MethodPost, "/webhooks/pagerduty", strings.NewReader(pagerDuty))
+	pagerDutyReq.Header.Set("X-PagerDuty-Signature", signV1("pd-secret", []byte(pagerDuty)))
+
+	cases := []struct {
+		name  string
+		req   *http.Request
+		route string
+	}{
+		{"repository", github("push", githubPushPayload), "/api/v1/webhook/intake/repository"},
+		{"actions", github("workflow_run", workflowRun), "/api/v1/webhook/intake/actions"},
+		{"incident", pagerDutyReq, "/api/v1/webhook/intake/incident"},
+		{"aws", bearer("/webhooks/aws/eventbridge", "aws-tok", aws), "/api/v1/webhook/intake/aws"},
+		{"gcp", bearer("/webhook/gcp-freshness", "gcp-tok", gcp), "/api/v1/webhook/intake/gcp"},
+	}
+	for _, tc := range cases {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, tc.req)
+		if rec.Code != http.StatusAccepted {
+			t.Fatalf("%s: status = %d, want 202 (%s)", tc.name, rec.Code, rec.Body.String())
+		}
+	}
+	if len(stub.submitted) != len(cases) {
+		t.Fatalf("submissions = %d, want %d", len(stub.submitted), len(cases))
+	}
+	for i, tc := range cases {
+		sub := stub.submitted[i]
+		if sub.route != tc.route {
+			t.Errorf("%s: route = %q, want %q", tc.name, sub.route, tc.route)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(sub.body, &decoded); err != nil {
+			t.Fatalf("%s: submitted body is not JSON: %v", tc.name, err)
+		}
+		if got := decoded["api_version"]; got != wantVersion {
+			t.Errorf("%s: api_version on the wire = %v, want %q", tc.name, got, wantVersion)
+		}
+	}
+}
+
+// TestREADMEStatesTheSupportedVersionPair keeps the documented version pair
+// in step with the code: the README must name the intake API version string
+// the satellite emits and the oldest and newest supported core builds, and
+// SECURITY.md must exist with a private reporting path.
+func TestREADMEStatesTheSupportedVersionPair(t *testing.T) {
+	t.Parallel()
+
+	readme, err := readRepoFile(t, "README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"## Supported core versions",
+		"Intake API version: `" + APIVersionV1 + "`",
+		"Oldest supported core build:",
+		"Newest supported core build:",
+	} {
+		if !strings.Contains(readme, want) {
+			t.Errorf("README.md missing %q", want)
+		}
+	}
+
+	security, err := readRepoFile(t, "SECURITY.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"## Reporting a Vulnerability", "## Supported Versions", "private"} {
+		if !strings.Contains(security, want) {
+			t.Errorf("SECURITY.md missing %q", want)
+		}
+	}
+}
