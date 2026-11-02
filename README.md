@@ -30,6 +30,11 @@ uplink), then `go run ./cmd/webhook`:
 `GET /healthz` is local liveness; `GET /readyz` probes core's `/healthz`
 and reports unready when the uplink is down.
 
+A signed GitHub `ping` (sent when a webhook is created or redelivered)
+answers `202` with `{"status":"ignored","decision":"ignored","reason":"ping"}`
+and makes no intake call. An unsigned ping is `401`; any other unsupported
+GitHub event is `422`.
+
 ## Verify
 
 `make ci` runs vet, golangci-lint, tests, and the race lane with the

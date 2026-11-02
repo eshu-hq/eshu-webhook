@@ -102,6 +102,10 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	event := strings.TrimSpace(r.Header.Get("X-GitHub-Event"))
+	if strings.EqualFold(event, githubEventPing) {
+		writeGitHubPingAccepted(w)
+		return
+	}
 	deliveryID := deliveryID(r.Header.Get("X-GitHub-Delivery"), body)
 	switch event {
 	case "workflow_run", "workflow_job":
@@ -119,6 +123,22 @@ func (s *Server) handleGitHub(w http.ResponseWriter, r *http.Request) {
 		}
 		s.submitRequest(w, r, IntakeRoutes["repository"], req)
 	}
+}
+
+// githubEventPing is the event name GitHub sends when a webhook is created
+// and on manual redelivery. It carries no repository change.
+const githubEventPing = "ping"
+
+// writeGitHubPingAccepted answers GitHub's webhook handshake exactly as the
+// removed in-tree listener did: 202 with the ignored decision and reason
+// "ping". The delivery is verified before this runs and is never submitted
+// to the intake host, so nothing is stored for it.
+func writeGitHubPingAccepted(w http.ResponseWriter) {
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status":   "ignored",
+		"decision": "ignored",
+		"reason":   githubEventPing,
+	})
 }
 
 func (s *Server) handleGitLab(w http.ResponseWriter, r *http.Request) {

@@ -7,6 +7,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -182,7 +184,8 @@ func TestServerOversizeBodyIs413(t *testing.T) {
 }
 
 // TestServerUnknownEventIs422 proves an unsupported event is rejected with
-// 422 after successful verification (no silent drop, no submission).
+// 422 after successful verification (no silent drop, no submission). The
+// event is deliberately not "ping", which has its own 202 contract.
 func TestServerUnknownEventIs422(t *testing.T) {
 	t.Parallel()
 
@@ -203,8 +206,8 @@ func TestServerUnknownEventIs422(t *testing.T) {
 	mac := hmac.New(sha256.New, []byte("gh-secret"))
 	mac.Write([]byte(payload))
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(payload))
-	req.Header.Set("X-GitHub-Event", "ping")
-	req.Header.Set("X-GitHub-Delivery", "d-ping")
+	req.Header.Set("X-GitHub-Event", "star")
+	req.Header.Set("X-GitHub-Delivery", "d-star")
 	req.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 	rec := httptest.NewRecorder()
 	srv.Mux().ServeHTTP(rec, req)
@@ -213,6 +216,89 @@ func TestServerUnknownEventIs422(t *testing.T) {
 	}
 	if len(stub.submitted) != 0 {
 		t.Fatalf("submissions = %d, want 0", len(stub.submitted))
+	}
+}
+
+// TestServerSignedGitHubPingIs202Ignored proves the listener contract for
+// GitHub's webhook-creation handshake: a signed ping answers 202 with the
+// ignored decision and reason "ping", and never calls the intake host. The
+// event name is matched case-insensitively.
+func TestServerSignedGitHubPingIs202Ignored(t *testing.T) {
+	t.Parallel()
+
+	for _, event := range []string{"ping", "PING", " ping "} {
+		t.Run(event, func(t *testing.T) {
+			t.Parallel()
+
+			stub := &stubCore{t: t}
+			core := httptest.NewServer(http.HandlerFunc(stub.handler))
+			defer core.Close()
+
+			cfg := testConfig()
+			cfg.GitHubSecret = "gh-secret"
+			cfg.IntakeURL = core.URL
+			cfg.IntakeToken = "core-tok"
+			srv, err := NewServerWithClient(cfg, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			payload := `{"zen":"Keep it logically awesome.","hook_id":123}`
+			mac := hmac.New(sha256.New, []byte("gh-secret"))
+			mac.Write([]byte(payload))
+			req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(payload))
+			req.Header.Set("X-GitHub-Event", event)
+			req.Header.Set("X-GitHub-Delivery", "d-ping")
+			req.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+			rec := httptest.NewRecorder()
+			srv.Mux().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("status = %d, want 202 (body %s)", rec.Code, rec.Body.String())
+			}
+			var got map[string]string
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatalf("body %q is not JSON: %v", rec.Body.String(), err)
+			}
+			want := map[string]string{"status": "ignored", "decision": "ignored", "reason": "ping"}
+			if !maps.Equal(got, want) {
+				t.Fatalf("body = %v, want %v", got, want)
+			}
+			if len(stub.submitted) != 0 {
+				t.Fatalf("intake calls = %d, want 0", len(stub.submitted))
+			}
+		})
+	}
+}
+
+// TestServerUnsignedGitHubPingIs401 proves the ping short-circuit sits after
+// signature verification: an unsigned ping is still rejected.
+func TestServerUnsignedGitHubPingIs401(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubCore{t: t}
+	core := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer core.Close()
+
+	cfg := testConfig()
+	cfg.GitHubSecret = "gh-secret"
+	cfg.IntakeURL = core.URL
+	cfg.IntakeToken = "core-tok"
+	srv, err := NewServerWithClient(cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(`{"zen":"hi"}`))
+	req.Header.Set("X-GitHub-Event", "ping")
+	req.Header.Set("X-Hub-Signature-256", "sha256=deadbeef")
+	rec := httptest.NewRecorder()
+	srv.Mux().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	if len(stub.submitted) != 0 {
+		t.Fatalf("intake calls = %d, want 0", len(stub.submitted))
 	}
 }
 
