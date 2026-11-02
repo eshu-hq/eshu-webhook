@@ -46,7 +46,7 @@ Log record `webhook request` fields: `route`, `provider`, `method`, `status`,
 `outcome`, `reason`, `delivery_id`, `duration_ms`. Level is INFO for
 `accepted` and `ignored`, WARN for `rejected`, ERROR for `failed`. A log line never carries
 the body, a secret, a token, or a signature; `delivery_id` is the provider
-header (truncated to 200 bytes) or the `sha256:` content hash the intake
+header (at most 200 bytes, cut on a rune boundary) or the `sha256:` content hash the intake
 submission also uses.
 
 | Series | Type | Labels |
