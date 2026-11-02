@@ -162,8 +162,14 @@ type) answers `422` here and is not forwarded.
 checked once against core by a throwaway test in a core worktree
 (`origin/main` 87eebb09): for every fixture, core's `NormalizePubSubPush`
 trigger equals the trigger core's intake builds from the golden request, and
-every rejected shape in `gcp_normalize_test.go` is rejected by core too.
+every rejected shape in `gcp_normalize_test.go` is rejected by core's
+normalizer or intake (the oversize-field case by the intake wire limit).
 Re-run that check when core's `gcpcloud/freshness/pubsub.go` changes.
+
+The satellite models fewer TemporalAsset fields than core (`asset.name` and
+`priorAssetState` are not decoded), so a wrong-typed value in one of those
+that core's decoder would reject is forwarded, and core's intake validates the
+request it builds.
 
 ## Verify
 
