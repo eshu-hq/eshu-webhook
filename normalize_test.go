@@ -289,24 +289,6 @@ func TestNormalizeAWSFreshness(t *testing.T) {
 	}
 }
 
-func TestNormalizeGCPFreshness(t *testing.T) {
-	t.Parallel()
-
-	payload := `{"message":{"messageId":"m-1","publishTime":"2026-10-01T00:00:00Z",` +
-		`"attributes":{"assetType":"compute.googleapis.com/Instance","location":"us-central1",` +
-		`"parentScopeKind":"project","parentScopeId":"p1"}}}`
-	req, err := NormalizeGCPFreshness([]byte(payload))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if req.EventID != "m-1" || req.ParentScopeID != "p1" || req.Kind != "asset_update" {
-		t.Fatalf("gcp = %+v", req)
-	}
-	if _, err := NormalizeGCPFreshness([]byte(`{"message":{}}`)); err == nil {
-		t.Fatal("NormalizeGCPFreshness(missing fields) = nil, want error")
-	}
-}
-
 func TestRawScalarShapes(t *testing.T) {
 	t.Parallel()
 

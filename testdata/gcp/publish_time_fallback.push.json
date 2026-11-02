@@ -1,0 +1,8 @@
+{
+  "message": {
+    "data": "eyJhc3NldCI6eyJuYW1lIjoiLy9zdG9yYWdlLmdvb2dsZWFwaXMuY29tL2RlbW8tYnVja2V0IiwiYXNzZXRUeXBlIjoic3RvcmFnZS5nb29nbGVhcGlzLmNvbS9CdWNrZXQiLCJhbmNlc3RvcnMiOlsicHJvamVjdHMvMTIzNDU2Nzg5MDEyIl0sInJlc291cmNlIjp7ImxvY2F0aW9uIjoidXMifX0sImRlbGV0ZWQiOmZhbHNlfQo=",
+    "messageId": "9400000000000005",
+    "publishTime": "2026-06-01T12:00:00.000Z"
+  },
+  "subscription": "projects/demo-project/subscriptions/eshu-cai-feed"
+}
