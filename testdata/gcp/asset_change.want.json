@@ -1,0 +1,10 @@
+{
+  "api_version": "v1",
+  "event_id": "9400000000000001",
+  "kind": "asset_change",
+  "parent_scope_kind": "project",
+  "parent_scope_id": "123456789012",
+  "asset_type": "compute.googleapis.com/Instance",
+  "location": "us-central1-a",
+  "observed_at": "2026-06-01T11:59:00Z"
+}

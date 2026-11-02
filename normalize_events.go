@@ -157,48 +157,6 @@ func NormalizeAWSFreshness(payload []byte) (AWSIntakeRequest, error) {
 	return req, nil
 }
 
-// NormalizeGCPFreshness converts a verified Pub/Sub push delivery (bearer
-// token auth) into a GCP intake request.
-func NormalizeGCPFreshness(payload []byte) (GCPIntakeRequest, error) {
-	var event struct {
-		Message struct {
-			MessageID  string `json:"messageId"`
-			Attributes struct {
-				AssetType       string `json:"assetType"`
-				Location        string `json:"location"`
-				ParentScopeKind string `json:"parentScopeKind"`
-				ParentScopeID   string `json:"parentScopeId"`
-				Kind            string `json:"kind"`
-			} `json:"attributes"`
-			PublishTime string `json:"publishTime"`
-		} `json:"message"`
-	}
-	if err := decodePayload(payload, &event); err != nil {
-		return GCPIntakeRequest{}, err
-	}
-	attrs := event.Message.Attributes
-	req := GCPIntakeRequest{
-		APIVersion:      APIVersionV1,
-		EventID:         strings.TrimSpace(event.Message.MessageID),
-		Kind:            firstNonEmpty(strings.TrimSpace(attrs.Kind), "asset_update"),
-		ParentScopeKind: strings.TrimSpace(attrs.ParentScopeKind),
-		ParentScopeID:   strings.TrimSpace(attrs.ParentScopeID),
-		AssetType:       strings.TrimSpace(attrs.AssetType),
-		Location:        strings.TrimSpace(attrs.Location),
-		ObservedAt:      parseObservedAt(event.Message.PublishTime),
-	}
-	if req.EventID == "" || req.ParentScopeID == "" {
-		return GCPIntakeRequest{}, errors.New("gcp freshness push is missing required fields")
-	}
-	if err := CheckWireLengths(map[string]string{
-		"event_id": req.EventID, "kind": req.Kind, "parent_scope_kind": req.ParentScopeKind,
-		"parent_scope_id": req.ParentScopeID, "asset_type": req.AssetType, "location": req.Location,
-	}); err != nil {
-		return GCPIntakeRequest{}, err
-	}
-	return req, nil
-}
-
 func newIncidentRequest(provider, eventKind, eventID, scopeID, resourceID string) (IncidentIntakeRequest, error) {
 	req := IncidentIntakeRequest{
 		APIVersion: APIVersionV1,

@@ -205,7 +205,7 @@ func TestEveryIntakeFamilyStampsTheSupportedAPIVersion(t *testing.T) {
 	workflowRun := `{"action":"completed","repository":{"id":42,"full_name":"Octo/Repo"},"workflow_run":{"id":100}}`
 	pagerDuty := `{"event":{"id":"e1","event_type":"incident.triggered"},"incident":{"id":"i1"}}`
 	aws := `{"id":"ev-1","detail-type":"EC2 State Change","account":"1","region":"r","source":"aws.ec2","detail":{}}`
-	gcp := `{"message":{"messageId":"m-1","attributes":{"parentScopeId":"p1"}}}`
+	gcp := string(readGCPFixture(t, "asset_change.push.json"))
 
 	github := func(event, payload string) *http.Request {
 		req := httptest.NewRequest(http.MethodPost, "/webhooks/github", strings.NewReader(payload))

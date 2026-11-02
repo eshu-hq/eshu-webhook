@@ -142,6 +142,29 @@ request.
 See [SECURITY.md](SECURITY.md) for how to report a vulnerability and which
 versions get fixes.
 
+## GCP Cloud Asset Inventory pushes
+
+`POST` on the GCP route accepts a Pub/Sub push whose `message.data` is a
+base64 Cloud Asset Inventory `TemporalAsset`, the same input core's own push
+handler decodes. `kind` is `asset_change`, or `asset_deleted` when the
+asset's `deleted` flag is set (falling back to `priorAsset`); the parent
+scope comes from `ancestors`, and `observed_at` from `window.startTime`, then
+the asset `updateTime`, then the message `publishTime`. `message.attributes`
+are not read. The first-subscription welcome message (a bare JSON string)
+is acknowledged with `202` (`status: ignored`, `reason: welcome_message`)
+and never reaches core, so Pub/Sub does not retry it. Input core would reject
+(bad base64, no asset, no parseable ancestors, missing or wildcard asset
+type) answers `422` here and is not forwarded.
+
+**GCP parity.** The satellite cannot import core, so
+`testdata/gcp/*.push.json` (sanitized recorded pushes) and
+`*.want.json` (expected intake requests) are golden fixtures. They were
+checked once against core by a throwaway test in a core worktree
+(`origin/main` 87eebb09): for every fixture, core's `NormalizePubSubPush`
+trigger equals the trigger core's intake builds from the golden request, and
+every rejected shape in `gcp_normalize_test.go` is rejected by core too.
+Re-run that check when core's `gcpcloud/freshness/pubsub.go` changes.
+
 ## Verify
 
 `make ci` runs vet, golangci-lint, tests, and the race lane with the

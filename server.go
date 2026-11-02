@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -146,6 +147,21 @@ func writeGitHubPingAccepted(w http.ResponseWriter) {
 	})
 }
 
+// gcpWelcomeReason is the machine reason for the Cloud Asset Inventory
+// first-subscription welcome message.
+const gcpWelcomeReason = "welcome_message"
+
+// writeGCPWelcomeAccepted acknowledges the verified welcome message the way
+// core's push handler does: 202 with status ignored and reason
+// welcome_message, no intake call, so Pub/Sub does not redeliver it.
+func writeGCPWelcomeAccepted(w http.ResponseWriter) {
+	setIgnored(w, gcpWelcomeReason)
+	writeJSON(w, http.StatusAccepted, map[string]string{
+		"status": "ignored",
+		"reason": gcpWelcomeReason,
+	})
+}
+
 func (s *Server) handleGitLab(w http.ResponseWriter, r *http.Request) {
 	body, ok := s.readPostBody(w, r)
 	if !ok {
@@ -241,6 +257,10 @@ func (s *Server) handleGCPFreshness(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req, err := NormalizeGCPFreshness(body)
+	if errors.Is(err, ErrGCPWelcomeMessage) {
+		writeGCPWelcomeAccepted(w)
+		return
+	}
 	if err != nil {
 		writeUnprocessable(w, err)
 		return

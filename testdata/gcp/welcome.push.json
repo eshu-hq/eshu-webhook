@@ -1,0 +1,8 @@
+{
+  "message": {
+    "data": "IllvdSBoYXZlIHN1Y2Nlc3NmdWxseSBzdWJzY3JpYmVkIHRvIHRoZSBmZWVkLiI=",
+    "messageId": "9400000000000006",
+    "publishTime": "2026-06-01T12:00:00.000Z"
+  },
+  "subscription": "projects/demo-project/subscriptions/eshu-cai-feed"
+}
