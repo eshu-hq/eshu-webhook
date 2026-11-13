@@ -4,7 +4,7 @@ Thanks for helping. Read [CONTRIBUTING.md](../../CONTRIBUTING.md)
 before opening a pull request; this page is the short
 version so you can get your local checks green first.
 
-Go version is pinned in `go.mod` (`go 1.26.10`, module
+Go version is pinned in `go.mod` (`go 1.26.11`, module
 `github.com/eshu-hq/eshu-webhook`, standard library only).
 
 ```bash
