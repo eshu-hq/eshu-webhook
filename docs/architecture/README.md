@@ -23,7 +23,7 @@ diagram for quick reading.
 - Environment-only configuration (`config.go`); signature
   and token checks in `signature.go`; intake posts in
   `intake.go`.
-- Standard library only, Go `1.26.10` pinned in `go.mod`
+- Standard library only, Go `1.26.11` pinned in `go.mod`
   (module `github.com/eshu-hq/eshu-webhook`).
 - No storage of any kind. See
   [boundaries](../concepts/boundaries.md).

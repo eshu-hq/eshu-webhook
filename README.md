@@ -103,7 +103,7 @@ and a trigger is the record core makes after accepting one.
 
 ## Development
 
-Go `1.26.10` (pinned in `go.mod`, standard library only). Run
+Go `1.26.11` (pinned in `go.mod`, standard library only). Run
 `make ci` for lint, tests, and the race suite with its coverage
 floor. Details sit in [contributing](docs/contributing/README.md).
 
