@@ -48,6 +48,31 @@ It listens on `:8080` by default and reads environment variables
 only. `/readyz` also probes core, so a copy that can't reach core
 won't take traffic. That's on purpose.
 
+## Supported core versions
+
+The satellite and core ship separately. Core owns the intake API; the
+satellite emits one wire version of it.
+
+- Intake API version: `v1` (`api_version` on every submission; core accepts
+  absent or `v1` and rejects anything else with `unsupported_api_version`).
+  `compatibility_test.go` asserts this exact string on the wire for every
+  intake family, so changing it fails a test before it fails in production.
+- Oldest supported core build: Eshu `main` at `50ba1f2a70` (2026-10-30), the
+  first commit that carries the `webhook-intake` host serving the v1 API. The
+  v1 intake API package itself first appeared at `39289ff019` (2026-10-28),
+  which has no standalone host.
+- Newest supported core build: Eshu `main` at `d2eca4fb01` (2026-11-01), the
+  newest build checked. The v1 wire code in
+  `go/internal/webhook/intake/api.go` and the `webhook-intake` host are
+  unchanged on the wire since `39289ff019` (the only non-comment change is an
+  import path). Raise this line when a newer core build is checked.
+- No tagged core release carries the intake host yet (core tags end at
+  `v0.0.3-pre-release-18`). Until one does, the pair is stated as core
+  commits; replace them with release tags once core publishes one.
+- This pair is a read of the wire contract and git history, not an end to end
+  run against every build in the range. The deployed proof is tracked on
+  eshu-hq/eshu#8876.
+
 ## Documentation
 
 | Doc | What's in it |
