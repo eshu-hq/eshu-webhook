@@ -100,6 +100,10 @@ and a trigger is the record core makes after accepting one.
 - [eshu-collector-aws-cloud](https://github.com/eshu-hq/eshu-collector-aws-cloud)
   and the other collectors: they do the actual reading once core
   decides a refresh is due. Nothing here calls them directly.
+- [eshu-deploy](https://github.com/eshu-hq/eshu-deploy): Helm charts and
+  Compose files for running the stack.
+- [Collector and Reducer Readiness](https://github.com/eshu-hq/eshu/blob/main/docs/public/reference/collector-reducer-readiness.md) and the 31-repo
+  [Repository Map](https://github.com/eshu-hq/eshu/blob/main/REPOSITORIES.md).
 
 ## Development
 
